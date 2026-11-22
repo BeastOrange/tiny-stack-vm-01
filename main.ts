@@ -1,5 +1,15 @@
 import { readFileSync as R, readdirSync as L, mkdirSync as K, writeFileSync as W } from "node:fs";
 const T = Buffer.from("ABFBBAYKCw///////////wkJCQkJCQkFCQkJBQkJCf8JCQn/////////////////ICQkIAD//////////////wUI//////////////////8EBAEE", "base64");
+const IMM = new Uint8Array(256), POPS = new Uint8Array(256), PUSHES = new Uint8Array(256), VALID = new Uint8Array(256);
+for (let i = 0; i < T.length; i++) {
+  const v = T[i];
+  if (v !== 255) {
+    VALID[i] = 1;
+    IMM[i] = v >> 4;
+    POPS[i] = (v >> 2) & 3;
+    PUSHES[i] = v & 3;
+  }
+}
 const enc = new TextEncoder();
 function run(p: Uint8Array, inp: Uint8Array) {
 const n = p.length, D = new Int32Array(256), C = new Int32Array(64), M = new Int32Array(256), out = new Uint8Array(65536);
@@ -9,14 +19,14 @@ const u16 = (i: number) => p[i] | (p[i + 1] << 8);
 for (;;) {
 if (steps === 1e6) return done(10);
 if (pc < 0 || pc >= n) return done(9);
-const op = p[pc], info = op < 84 ? T[op] : 255;
-if (info === 255) return done(5);
-const imm = info >> 4;
+const op = p[pc];
+if (!VALID[op]) return done(5);
+const imm = IMM[op];
 if (pc + imm >= n) return done(9);
 steps++;
-const next = pc + 1 + imm, pops = (info >> 2) & 3;
+const next = pc + 1 + imm, pops = POPS[op];
 if (sp < pops) return done(2);
-if (sp - pops + (info & 3) > 256) return done(3);
+if (sp - pops + PUSHES[op] > 256) return done(3);
 pc = next;
 if (op >= 16 && op <= 34 && op !== 23 && op !== 27) {
 const b = D[--sp]; a = D[--sp];
@@ -39,9 +49,9 @@ case 7: t = D[sp - 3]; D[sp - 3] = D[sp - 2]; D[sp - 2] = D[sp - 1]; D[sp - 1] =
 case 23: D[sp - 1] = -D[sp - 1] | 0; break;
 case 27: D[sp - 1] = ~D[sp - 1]; break;
 case 48: case 49: case 50:
-if (op === 48 || (op === 49 ? !D[--sp] : D[--sp])) pc = next + (u16(next - 2) << 16 >> 16);
+if (op === 48 || (op === 49 ? !D[--sp] : D[--sp])) pc = next + ((p[next - 2] | (p[next - 1] << 8)) << 16 >> 16);
 break;
-case 51: if (csp === 64) return done(7); C[csp++] = next; pc = u16(next - 2); break;
+case 51: if (csp === 64) return done(7); C[csp++] = next; pc = p[next - 2] | (p[next - 1] << 8); break;
 case 52: if (!csp) return done(8); pc = C[--csp]; break;
 case 64: case 65:
 a = D[sp - 1]; if (a >>> 8) return done(6);
